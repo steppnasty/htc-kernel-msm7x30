@@ -384,7 +384,7 @@ u32 vidc_lookup_addr_table(struct video_client_ctx *client_ctx,
 
 	if (!client_ctx)
 		return false;
-
+	mutex_lock(&client_ctx->enrty_queue_lock);
 	if (buffer == BUFFER_TYPE_INPUT) {
 		buf_addr_table = client_ctx->input_buf_addr_table;
 		num_of_buffers = client_ctx->num_of_input_buffers;
@@ -434,6 +434,7 @@ u32 vidc_lookup_addr_table(struct video_client_ctx *client_ctx,
 			" pmem_fd = %d, struct *file	= %p "
 			"buffer_index = %d\n", *user_vaddr, *phy_addr,
 			*pmem_fd, *file, *buffer_index);
+		mutex_unlock(&client_ctx->enrty_queue_lock);
 		return true;
 	} else {
 		if (search_with_user_vaddr)
@@ -443,6 +444,7 @@ u32 vidc_lookup_addr_table(struct video_client_ctx *client_ctx,
 			DBG("%s() : client_ctx = %p kernel_virt_addr = 0x%08lx"
 			" Not Found.\n", __func__, client_ctx,
 			*kernel_vaddr);
+		mutex_unlock(&client_ctx->enrty_queue_lock);
 		return false;
 	}
 }
@@ -461,7 +463,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 
 	if (!client_ctx)
 		return false;
-
+	mutex_lock(&client_ctx->enrty_queue_lock);
 	if (buffer == BUFFER_TYPE_INPUT) {
 		buf_addr_table = client_ctx->input_buf_addr_table;
 		num_of_buffers = &client_ctx->num_of_input_buffers;
@@ -478,7 +480,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 	if (*num_of_buffers == max_num_buffers) {
 		ERR("%s(): Num of buffers reached max value : %d",
 			__func__, max_num_buffers);
-		return false;
+		goto bail_out_add;
 	}
 
 	i = 0;
@@ -489,7 +491,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 		DBG("%s() : client_ctx = %p."
 			" user_virt_addr = 0x%08lx already set",
 			__func__, client_ctx, user_vaddr);
-		return false;
+		goto bail_out_add;
 	} else {
 		if (get_pmem_file(pmem_fd, &phys_addr,
 				kernel_vaddr, &len, &file)) {
@@ -499,6 +501,20 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 		put_pmem_file(file);
 		phys_addr += buffer_addr_offset;
 		(*kernel_vaddr) += buffer_addr_offset;
+		flags = (buffer == BUFFER_TYPE_INPUT) ? MSM_SUBSYSTEM_MAP_IOVA :
+		MSM_SUBSYSTEM_MAP_IOVA|MSM_SUBSYSTEM_ALIGN_IOVA_8K;
+		mapped_buffer = msm_subsystem_map_buffer(phys_addr, length,
+		flags, vidc_mmu_subsystem,
+		sizeof(vidc_mmu_subsystem)/sizeof(unsigned int));
+		if (IS_ERR(mapped_buffer)) {
+			pr_err("buffer map failed");
+			goto ion_error;
+		}
+		buf_addr_table[*num_of_buffers].client_data = (void *)
+			mapped_buffer;
+		buf_addr_table[*num_of_buffers].dev_addr =
+			mapped_buffer->iova[0];
+>>>>>>> 075d00c... vidc: synchronize access to address lookup table.
 		buf_addr_table[*num_of_buffers].user_vaddr = user_vaddr;
 		buf_addr_table[*num_of_buffers].kernel_vaddr = *kernel_vaddr;
 		buf_addr_table[*num_of_buffers].pmem_fd = pmem_fd;
@@ -509,6 +525,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 			"kernel_vaddr = 0x%08lx inserted!",	__func__,
 			client_ctx, user_vaddr, *kernel_vaddr);
 	}
+	mutex_unlock(&client_ctx->enrty_queue_lock);
 	return true;
 }
 EXPORT_SYMBOL(vidc_insert_addr_table);
@@ -524,7 +541,7 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 
 	if (!client_ctx)
 		return false;
-
+	mutex_lock(&client_ctx->enrty_queue_lock);
 	if (buffer == BUFFER_TYPE_INPUT) {
 		buf_addr_table = client_ctx->input_buf_addr_table;
 		num_of_buffers = &client_ctx->num_of_input_buffers;
@@ -537,7 +554,7 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 	}
 
 	if (!*num_of_buffers)
-		return false;
+		goto bail_out_del;
 
 	i = 0;
 	while (i < *num_of_buffers &&
@@ -547,7 +564,7 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 		DBG("%s() : client_ctx = %p."
 			" user_virt_addr = 0x%08lx NOT found",
 			__func__, client_ctx, user_vaddr);
-		return false;
+		goto bail_out_del;
 	}
 	*kernel_vaddr = buf_addr_table[i].kernel_vaddr;
 	if (i < (*num_of_buffers - 1)) {
@@ -566,7 +583,11 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 	DBG("%s() : client_ctx = %p."
 		" user_virt_addr = 0x%08lx is found and deleted",
 		__func__, client_ctx, user_vaddr);
+	mutex_unlock(&client_ctx->enrty_queue_lock);
 	return true;
+bail_out_del:
+	mutex_unlock(&client_ctx->enrty_queue_lock);
+	return false;
 }
 EXPORT_SYMBOL(vidc_delete_addr_table);
 
