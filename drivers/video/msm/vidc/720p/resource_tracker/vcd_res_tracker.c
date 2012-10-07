@@ -23,9 +23,9 @@
 #include <mach/clk.h>
 #include <mach/msm_reqs.h>
 #include <linux/interrupt.h>
-#include "vidc_type.h"
+#include <media/msm/vidc_init.h>
+#include <media/msm/vidc_type.h>
 #include "vcd_res_tracker.h"
-#include "vidc_init.h"
 
 #define MSM_AXI_QOS_NAME "msm_vidc_reg"
 

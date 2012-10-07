@@ -17,8 +17,7 @@
  */
 
 #include <asm/div64.h>
-
-#include "vidc_type.h"
+#include <media/msm/vidc_type.h>
 #include "vcd.h"
 #include "vdec_internal.h"
 
