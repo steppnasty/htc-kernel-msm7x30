@@ -721,3 +721,18 @@ void res_trk_init(struct device *device, u32 irq)
 u32 res_trk_get_core_type(void){
 	return resource_context.core_type;
 }
+
+int res_trk_check_for_sec_session()
+{
+	return 0;
+}
+
+int res_trk_open_secure_session()
+{
+	return -EINVAL;
+}
+
+int res_trk_close_secure_session()
+{
+	return 0;
+}
